@@ -218,3 +218,4 @@ __marimo__/
 .streamlit/secrets.toml
 /chapter04/chest_xray
 /chapter05/data
+/chapter06/data
