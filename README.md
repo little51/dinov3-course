@@ -4,6 +4,10 @@
 
 注意：本书完整源码、数据和配套资源请见**本书附带的二维码资源包**。
 
+![](https://gitclone.com/download1/aliendao/dinov3.png)
+
+[图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
+
 ---
 
 ## 目录
