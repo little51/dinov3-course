@@ -1,12 +1,12 @@
 # 《视觉自监督模型DINOv3：原理、训练到部署》
 
-本仓库为本书的**目录导航与勘误更新页**。
+- ### 本仓库为本书的勘误更新页
 
-注意：本书完整源码、数据和配套资源请见**本书附带的二维码资源包**。
+- ### 本书完整源码、数据和配套资源请见本书附带的二维码资源包
 
 ![](https://gitclone.com/download1/aliendao/dinov3.png)
 
-[图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
+### [图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
 
 ---
 

@@ -14,7 +14,7 @@ from transformers import Sam3Model, Sam3Processor
 ISIC_DIR = r"isic2018"                   # ISIC 数据集路径
 MODEL_NAME = "jetjodh/sam3"              # 或本地路径
 OUTPUT_DIR = r"output/isic_lora"         # 输出目录
-NUM_EPOCHS = 2                           # 训练轮数 
+NUM_EPOCHS = 3                           # 训练轮数 
 LR = 5e-4                                # 学习率
 RESOLUTION = 448                         # 输入分辨率
 VAL_RATIO = 0.1                          # 验证集比例
