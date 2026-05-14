@@ -14,7 +14,7 @@
 
 ---
 
-*最后更新：2026-05-12*
+*最后更新：2026-05-13*
 
 ---
 
@@ -55,10 +55,10 @@
 conda create -n dinov3_09a python=3.12 -y
 # 激活虚拟环境
 conda activate dinov3_09a
-# 安装PyTorch
-pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+# 安装PyTorch（国内用清华镜像，避免被墙）
+pip install torch==2.4.1 torchvision==0.19.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
 # 安装依赖
-pip install transformers==5.1.0 peft accelerate datasets pandas pyarrow pillow numpy
+pip install transformers==5.1.0 peft accelerate datasets pandas pyarrow pillow numpy ultralytics
 ```
 
 ### 3、数据准备
@@ -84,7 +84,38 @@ isic2018/data/
 └── train_19.parquet
 ```
 
-### 4、训练原理
+### ★ YOLO 格式转换
+
+上述 parquet 数据可直接训练 SAM3，但如果要训练 **YOLO 检测模型**（作为端到端对比的病灶检测前端），需要先转换为标准 YOLO 格式。转换工具包详见下文第 5 节。
+
+```bash
+# 一行命令完成转换（默认输出到 yolo_data_isic）
+python prepare_yolo_data.py
+```
+
+输出目录结构：
+```
+yolo_data_isic
+├── images/
+│   ├── train/          1,980 张 .jpg（原始分辨率）
+│   └── val/            110 张 .jpg
+├── labels/
+│   ├── train/          YOLO 格式 .txt（class cx cy w h 归一化）
+│   └── val/
+└── data.yaml           供 YOLO 训练的配置文件
+```
+
+**转换规则**：
+| 步骤 | 说明 |
+|------|------|
+| 目标检测 | 将病灶分割任务简化为检测任务：从 GT mask 计算病灶 bbox |
+| 标签格式 | `0 x_center y_center width height`（归一化到 [0,1]） |
+| 单类别 | ISIC 2018 只有一个类别 `lesion`（class 0） |
+| bbox 外扩 | mask 边缘外扩 5px（与 SAM3 训练一致） |
+| 空 mask | 无病灶区域跳过（统计中记录跳过数） |
+| 数据划分 | 同样是最后 10% 文件作为验证集，与 SAM3 保持对齐 |
+
+### 4、SAM3 训练原理
 
 SAM3 的微调面临两个核心挑战：
 
@@ -103,30 +134,79 @@ Loss = BCE(pred, gt) + 5.0 × (1 - Dice(pred, gt))
 - Dice Loss 专注于轮廓匹配，权重 5.0 放大其影响
 - 从 200 个候选 mask 中选置信度 × Dice 最高的 top-5 做加权平均
 
+### ★ YOLOv8n 检测训练
+
+> YOLO 的作用是在对比实验中作为病灶检测前端，模拟真实 pipeline：
+> 图片 → YOLO 检测病灶位置 → bbox → SAM3 分割。
+> 避免使用 GT bbox 导致的高估，更贴近实际部署。
+
+**训练参数：**
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| 模型 | YOLOv8n（nano） | 6.3M 参数，轻量级检测器 |
+| 输入分辨率 | 640×640 | 标准 YOLO 训练尺寸 |
+| Epochs | 100 | 含 early stopping（patience=20） |
+| Batch size | 16 | GTX 1060 6GB 可运行 |
+| 增强策略 | mosaic 0.5 + 小旋转/缩放/翻转 | 保留病灶形态特征 |
+
+**预期结果（GTX 1060，约 1 小时）：**
+```
+mAP@50:    ~0.85-0.90
+mAP@50-95: ~0.65-0.70
+```
+
+训练完成后自动保存最佳权重至 `yolo_weights/best.pt`，供 `compare_sam3_vs_lora_yolo.py` 使用。
+
+**训练命令：**
+```bash
+python train_yolo_isic.py   # 默认 GPU 0，查找 yolo_data_isic/data.yaml
+python train_yolo_isic.py --data yolo_data_isic/data.yaml # 显式指定数据路径
+python train_yolo_isic.py --device cpu                  # CPU 训练（慢）
+python train_yolo_isic.py --epochs 50                   # 快速验证
+python train_yolo_isic.py --batch-size 8                # 低显存模式
+```
+
 ### 5、参考代码
 
 | 文件名 | 说明 |
 |--------|------|
 | `sam3_lora_isic.py` | SAM3 LoRA 训练主脚本，含数据加载、模型构建、训练循环 |
 | `compare_sam3_vs_lora.py` | GT mask 作为 bbox prompt 的对比评估 |
+| `prepare_yolo_data.py` | 将 parquet 数据集转换为 YOLO 格式（images + labels + data.yaml） |
+| `train_yolo_isic.py` | 在 ISIC 2018 上训练 YOLOv8n 检测模型 |
 | `compare_sam3_vs_lora_yolo.py` | YOLOv8n 检测 + SAM3 分割的端到端对比评估 |
 
 ### 6、运行方法
 
-**训练：**
+**SAM3 LoRA 训练：**
 ```bash
 conda activate dinov3_09a
 python sam3_lora_isic.py
 ```
 
+**数据准备（YOLO 格式）：**
+```bash
+conda activate dinov3_09a
+pip install pandas pyarrow  # 如果尚未安装
+python prepare_yolo_data.py
+```
+
+**YOLOv8n 训练：**
+
+```bash
+pip install ultralytics
+python train_yolo_isic.py --data yolo_data_isic/data.yaml
+```
+
 **GT Mask 对比评估：**
+
 ```bash
 python compare_sam3_vs_lora.py
 ```
 
 **YOLO 端到端对比评估：**
 ```bash
-pip install ultralytics
 python compare_sam3_vs_lora_yolo.py
 ```
 

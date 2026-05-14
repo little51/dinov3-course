@@ -227,3 +227,6 @@ __marimo__/
 /chapter09/__pycache__
 /chapter09/isic2018
 /chapter09/output
+/chapter09/runs
+/chapter09/yolo_data
+/chapter09/yolo_weights
