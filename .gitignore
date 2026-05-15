@@ -230,3 +230,6 @@ __marimo__/
 /chapter09/runs
 /chapter09/yolo_data
 /chapter09/yolo_weights
+/chapter12/whu_download
+/chapter12/dinov3_seg_whu
+/chapter12/whu_building
