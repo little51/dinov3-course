@@ -1,0 +1,12 @@
+{
+  "num_samples": 2416,
+  "mIoU": 0.5735,
+  "Bg_IoU": 0.9049,
+  "Building_IoU": 0.2421,
+  "Accuracy": 0.9164,
+  "Precision (building)": 0.3884,
+  "Recall (building)": 0.3179,
+  "F1 (building)": 0.3422,
+  "Dice (building)": 0.3422,
+  "Avg_Loss": 0.8764
+}

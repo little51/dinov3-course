@@ -31,7 +31,7 @@
 
 - [第十章 DINOv3图像分类：轻量级任务头训练](./chapter10/README.md)
 - [第十一章 DINOv3图像分类：基于自有数据训练](./chapter11/README.md)
-- [第十二章 DINOv3语义分割：卫星遥感图像分割训练](./chapter12/README.md)
+- [第十二章 DINOv3语义分割：卫星遥感图像分割训练（扩展阅读：DINOv3.sat493m遥感建筑分割训练）](./chapter12/README.md)
 - [第十三章 DINOv3目标检测：基于COCO数据集训练](./chapter13/README.md)
 - [第十四章 DINOv3知识蒸馏：构建轻量化视觉模型](./chapter14/README.md)
 - [第十五章 DINOv3蒸馏模型：轻量化图像分割](./chapter15/README.md)
