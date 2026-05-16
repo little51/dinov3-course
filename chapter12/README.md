@@ -14,7 +14,7 @@
 
 ---
 
-*最后更新：2026-05-15*
+*最后更新：2026-05-16*
 
 ---
 
@@ -52,7 +52,31 @@ pip install timm>=1.0.0 numpy>=1.24 pillow>=10.0 tqdm>=4.60
 python -c "import torch, timm; print(f'torch {torch.__version__}, timm {timm.__version__}, CUDA={torch.cuda.is_available()}')"
 ```
 
-### 3、数据准备
+### 3、目录结构
+
+```plaintext
+chapter12/
+├── whu_building/                   ← WHU 数据集
+├── dinov3_seg_whu/                 ← 训练产出的模型权重
+│   ├── best_model.pth
+│   ├── final_model.pth
+│   └── training_history.json
+├── eval_results/                   ← 评估产出
+└── scripts/
+    ├── train_dinov3_seg.py         ← 训练脚本
+    ├── eval_dinov3_seg.py          ← 评估+可视化脚本
+    └── extract_whu.py              ← 数据集解压脚本
+```
+
+### 4、参考代码
+
+| 脚本 | 功能 |
+|------|------|
+| `scripts/extract_whu.py` | 数据集解压整理 |
+| `scripts/train_dinov3_seg.py` | DINOv3 + DPT Head 训练 |
+| `scripts/eval_dinov3_seg.py` | 模型评估与结果可视化 |
+
+### 5、数据准备
 
 WHU Building Dataset（航空遥感 0.3m 分辨率，二值建筑分割）。
 
@@ -73,15 +97,7 @@ whu_building/
 └── test/image/  + test/label/
 ```
 
-### 4、参考代码
-
-| 脚本 | 功能 |
-|------|------|
-| `scripts/extract_whu.py` | 数据集解压整理 |
-| `scripts/train_dinov3_seg.py` | DINOv3 + DPT Head 训练 |
-| `scripts/eval_dinov3_seg.py` | 模型评估与结果可视化 |
-
-### 5、运行方法
+### 6、训练方法
 
 训练策略：冻结 DINOv3 backbone，只训练 DPT 分割头。
 
@@ -115,7 +131,7 @@ python scripts/train_dinov3_seg.py ^
 | 批大小 | 8（GTX 1060 6GB 经验值） |
 | 训练耗时 | ~3-4 min/epoch，50 epoch 约 3-4 小时 |
 
-### 6、模型评估
+### 7、评估方法
 
 用训练好的 `best_model.pth` 在测试集上跑评估：
 
@@ -127,19 +143,3 @@ python scripts/eval_dinov3_seg.py
 
 - `eval_results/test_results.json` — 数值指标（mIoU、Dice 等）
 - `eval_results/sample_*.png` — 8 张随机采样的 2×2 网格可视化
-
-### 7、目录结构
-
-```plaintext
-chapter12/
-├── whu_building/                   ← WHU 数据集
-├── dinov3_seg_whu/                 ← 训练产出的模型权重
-│   ├── best_model.pth
-│   ├── final_model.pth
-│   └── training_history.json
-├── eval_results/                   ← 评估产出
-└── scripts/
-    ├── train_dinov3_seg.py         ← 训练脚本
-    ├── eval_dinov3_seg.py          ← 评估+可视化脚本
-    └── extract_whu.py              ← 数据集解压脚本
-```
