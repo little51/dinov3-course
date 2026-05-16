@@ -23,7 +23,7 @@
 - [第四章 特征提取：视觉基础表示（扩展阅读：特征提取在医学影像上的应用）](./chapter04/README.md)
 - [第五章 零样本分类：文本与图像对齐（扩展阅读：DINOv3与词向量零样本分类）](./chapter05/README.md)
 - [第六章 语义分割：像素级分类（扩展阅读：DINOv3 皮肤病变语义分割）](./chapter06/README.md)
-- [第七章 目标检测：定位与识别](./chapter07/README.md)
+- [第七章 目标检测：定位与识别（扩展阅读：DINOv3 零训练特征遥感小目标检测）](./chapter07/README.md)
 - [第八章 特征匹配：密集稀疏关联](./chapter08/README.md)
 - [第九章 3D赋能：SAM 3D Body应用（扩展阅读：SAM3 LoRA 微调 ISIC 2018 病灶分割）](./chapter09/README.md)
 
