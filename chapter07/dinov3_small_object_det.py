@@ -26,9 +26,9 @@ OUTPUT_DIR = os.path.join(SCRIPT_DIR, 'output')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ─── Config ────────────────────────────────────────────────
-IMG_SIZE = 2048
+IMG_SIZE = 1536                   # 3x 放大 (512×3=1536)
 PATCH_SIZE = 16
-THRESHOLD_PCT = 99
+THRESHOLD_PCT = 97               # 前 3% 最强响应
 MIN_AREA_PCT = 0.00001
 LAYER_BEST = 19       # layer with highest Dice for box detection
 LAYERS_VIS = [3, 7, 11, 15, 19, 23]  # layers for feature vis (extract all)
@@ -69,10 +69,10 @@ def preprocess(pil_img, size):
     s = torch.tensor(IMAGENET_DEFAULT_STD).view(1, 3, 1, 1)
     return ((t.unsqueeze(0) - m) / s).to(DEVICE), img
 
-# ---- 3a. 2048x2048 for box detection (layer 19 only) ----
+# ---- 3a. 1536x1536 for box detection (layer 19 only) ----
 img_big = img_pil.resize((IMG_SIZE, IMG_SIZE), Image.LANCZOS)
-img_np_2048 = np.array(img_big)
-img_t_2048, _ = preprocess(img_pil, IMG_SIZE)
+img_np_big = np.array(img_big)
+img_t_big, _ = preprocess(img_pil, IMG_SIZE)
 
 feat_store = {}
 def hook_fn(m, i, o):
@@ -80,7 +80,7 @@ def hook_fn(m, i, o):
 handle = model.blocks[LAYER_BEST].register_forward_hook(hook_fn)
 torch.cuda.reset_peak_memory_stats()
 with torch.no_grad():
-    _ = model.forward_features(img_t_2048)
+    _ = model.forward_features(img_t_big)
 handle.remove()
 mem_peak = torch.cuda.max_memory_allocated() / 1e9
 
@@ -142,7 +142,7 @@ ax.set_title('(a) 原图 (512×512)', fontsize=12, fontweight='bold')
 ax.axis('off')
 
 ax = axes[0, 1]
-ax.imshow(img_np_2048)
+ax.imshow(img_np_big)
 for x1, y1, x2, y2, area in boxes:
     box_ratio = (x2-x1)*(y2-y1) / (IMG_SIZE*IMG_SIZE)
     if box_ratio < 0.005:      color, lw = 'red', 0.8
@@ -150,7 +150,7 @@ for x1, y1, x2, y2, area in boxes:
     else:                      color, lw = 'blue', 1.8
     rect = Rectangle((x1, y1), x2-x1, y2-y1, linewidth=lw, edgecolor=color, facecolor='none', alpha=0.6)
     ax.add_patch(rect)
-ax.set_title(f'(b) 放大 2048×2048 + 框选 ({len(boxes)} 个)', fontsize=12, fontweight='bold')
+ax.set_title(f'(b) 放大 {IMG_SIZE}×{IMG_SIZE} + 框选 ({len(boxes)} 个)', fontsize=12, fontweight='bold')
 ax.axis('off')
 
 ax = axes[0, 2]
@@ -159,7 +159,7 @@ ax.set_title('(c) 建筑标注 (GT)', fontsize=12, fontweight='bold')
 ax.axis('off')
 
 ax = axes[0, 3]
-ax.imshow(img_np_2048, alpha=0.5)
+ax.imshow(img_np_big, alpha=0.5)
 ax.imshow(feat_disp, cmap='jet', alpha=0.5)
 ax.set_title(f'(d) DINOv3 第 {LAYER_BEST} 层特征', fontsize=12, fontweight='bold')
 ax.axis('off')
@@ -193,7 +193,7 @@ for i, idx in enumerate(LAYERS_DISPLAY):
     dice = 2 * inter / (pred.sum() + mask_down.sum() + 1e-8)
     print(f"  Layer {idx:2d}: Dice vs GT = {dice:.4f}")
 
-# Row 1 col 4 (index 3): Binary mask from 2048
+# Row 1 col 4 (index 3): Binary mask from big image
 ax = axes[1, 3]
 ax.imshow(binary, cmap='gray', interpolation='nearest')
 ax.set_title(f'(j) 二值掩码 (前 {THRESHOLD_PCT}%)', fontsize=11, fontweight='bold')
