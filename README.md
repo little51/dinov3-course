@@ -6,7 +6,7 @@
 
 ![图书](https://5starsoft.com.cn/dinov3.jpg)
 
-### [图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
+### 本书由清华大学出版社出版     [图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
 
 ---
 
@@ -15,7 +15,7 @@
 ### 第一部分：基础篇
 
 - [第一章 DINOv3全景导览与学习指南](./chapter01/README.md)
-- [第二章 DINOv3的训练原理与核心机制](./chapter02/README.md)
+- [第二章 DINOv3的训练原理与核心机制（扩展阅读：DINOv3 ViT-Large 24层语义层级参考）](./chapter02/README.md)
 - [第三章 DINOv3实验配置要求与环境搭建](./chapter03/README.md)
 
 ### 第二部分：应用篇
