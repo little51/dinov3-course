@@ -233,3 +233,6 @@ __marimo__/
 /chapter12/whu_download
 /chapter12/dinov3_seg_whu
 /chapter12/whu_building
+/chapter02/output
+/chapter02/dinov3_24layers.mp4
+/chapter02/dinov3_24layers_video.py
