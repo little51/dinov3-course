@@ -42,6 +42,7 @@
 - [第十三章 DINOv3目标检测：基于COCO数据集训练](./chapter13/README.md)
 - [第十四章 DINOv3知识蒸馏：构建轻量化视觉模型](./chapter14/README.md)
 - [第十五章 DINOv3蒸馏模型：轻量化图像分割](./chapter15/README.md)
+  - 🧪 [扩展：EUPE-ViT-B 遥感线性分割和特征融合分割](./chapter15/README.md#-扩展实验eupe-vit-b-遥感线性分割)
 - [第十六章 DINOv3扩展应用：YOLO和DEIMv2应用](./chapter16/README.md)
 
 ---
