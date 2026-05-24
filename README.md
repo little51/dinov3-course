@@ -36,6 +36,7 @@
 ### 第三部分：训练篇
 
 - [第十章 DINOv3图像分类：轻量级任务头训练](./chapter10/README.md)
+  - 🧪 [扩展：CHASEDB1 视网膜血管分割 U-Net vs ConvNeXt](./chapter10/README.md#-扩展实验chasedb1-视网膜血管分割--unet-vs-eupe-convnext-base-双模型对比)
 - [第十一章 DINOv3图像分类：基于自有数据训练](./chapter11/README.md)
 - [第十二章 DINOv3语义分割：卫星遥感图像分割训练](./chapter12/README.md)
   - 🧪 [扩展：DINOv3.sat493m遥感建筑分割训练](./chapter12/README.md#-扩展实验whu-遥感建筑分割dinov3--dpt-head)
