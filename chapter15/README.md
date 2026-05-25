@@ -119,7 +119,11 @@ python eupe_sat_train.py
 
 ## 🧪扩展实验2：EUPE与UNet分割对比试验
 
-```
+与实验1的区别在于：将线性头（最后1层）扩展到3、6、9、12层进行融合，这就的修改可以达到mIoU=0.9403的指标。
+
+EUPE-ViT-B + DPT 在最终精度上胜出：mIoU 领先约 0.9 个百分点，Building IoU 领先约 1.6 个百分点。考虑到 EUPE 只用了 6.7M 可训练参数（U-Net 的 27%），参数效率的优势比较明显。
+
+```bash
 conda activate dinov3_15a
 python eupe_vs_unet.py
 ```
