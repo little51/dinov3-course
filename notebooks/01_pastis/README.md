@@ -1,4 +1,4 @@
-# PASTIS 时序语义分割 — DINOv3 ViT-L
+# PASTIS 时序语义分割 — ViT-L/16 distilled（SAT-493M，300M）	
 
 ## 目录结构
 
