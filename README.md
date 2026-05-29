@@ -49,3 +49,5 @@
 ---
 
 > - ### 🧪 扩展实验为图书之外的独立补充内容，建议在掌握对应章节基础后学习。
+
+![](https://gitclone.com/download1/aliendao/weixin-aliendao.jpg)
