@@ -3,12 +3,12 @@
 ## 目录结构
 
 ```bash
-project/
+01_pastis/
 ├── train_pastis.py            # 训练脚本
 ├── visualize_results.py       # 可视化脚本
-├── data/                      # PASTIS 数据
-│   └── PASTIS/
-└── outputs/                   # 训练输出
+├── data/                      # PASTIS 数据（建议用迅雷下载）
+│   └── PASTIS-R/
+└── outputs/                   # 训练输出（训练时产生）
     ├── best_model.pth         # mIoU最佳模型权重
     ├── results.json           # 测试结果
     └── training.log           # 训练日志
