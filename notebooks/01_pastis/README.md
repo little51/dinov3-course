@@ -100,6 +100,6 @@ python visualize_results.py
 
 ## 参考
 
-- PASTIS: https://github.com/VSainteuf/pastis-gan
+- PASTIS: https://github.com/VSainteuf/pastis-benchmark
 - DINOv3: https://github.com/facebookresearch/dinov3
 - torchgeo: https://github.com/microsoft/torchgeo
