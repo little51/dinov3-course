@@ -247,3 +247,5 @@ __marimo__/
 /chapter10/models
 /notebooks/01_pastis/outputs/best_model.pth
 /notebooks/01_pastis/data
+/notebooks/02_loveda/data
+/notebooks/02_loveda/output
