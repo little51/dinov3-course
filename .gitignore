@@ -249,3 +249,6 @@ __marimo__/
 /notebooks/01_pastis/data
 /notebooks/02_loveda/data
 /notebooks/02_loveda/output
+/notebooks/03_sam3_tree/sam3.pt
+/notebooks/03_sam3_tree/output
+/notebooks/03_sam3_tree/bpe_simple_vocab_16e6.txt.gz
