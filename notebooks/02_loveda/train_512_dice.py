@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""LoveDA 7-class — DINOv3 frozen + ASPP decoder, 512×512 input (fair comparison baseline)."""
+"""LoveDA 7-class — DINOv3 frozen + ASPP decoder, 512×512 input (fix SAT-493M norm).
+   ONLY change from original train_512.py: added SAT-493M normalization."""
 import os, json, time, random
 import numpy as np
 import torch, torch.nn as nn, torch.nn.functional as F
@@ -10,8 +11,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 print = lambda *a, **kw: __import__('builtins').print(*a, **kw, flush=True)
 
 # ─── Config ─────────────────────────────────────────────────────────────
-DATA_DIR = "./data/LoveDA"
-OUTPUT_DIR = "./output"
+DATA_DIR = "data/LoveDA"
+OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 BATCH_SIZE = 4
@@ -28,8 +29,12 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-IMG_SIZE = 512   # 512×512 → patch=16 → 32×32 grid
-SUBSET = 1.0     # 100% data — full run
+IMG_SIZE = 512
+SUBSET = 1.0
+
+# ─── SAT-493M official normalization ────────────────────────────────────
+SAT_MEAN = (0.430, 0.411, 0.296)
+SAT_STD  = (0.213, 0.156, 0.143)
 
 # ─── Data ───────────────────────────────────────────────────────────────
 from torchgeo.datasets import LoveDA
@@ -43,13 +48,14 @@ class LoveDA7Class:
     def __getitem__(self, idx):
         s = self.base[idx]
         img = s['image'].float() / 255.0
-        mean_t = torch.tensor((0.430, 0.411, 0.296)).view(3, 1, 1)
-        std_t  = torch.tensor((0.213, 0.156, 0.143)).view(3, 1, 1)
-        img = (img - mean_t) / std_t
         mask = s['mask'].clone()
         remapped = torch.full_like(mask, 255, dtype=torch.long)
         for orig, new in zip(range(1, 8), range(7)):
             remapped[mask == orig] = new
+        # [FIX] SAT-493M normalization (was missing in original)
+        mean_t = torch.tensor(SAT_MEAN).view(3, 1, 1)
+        std_t  = torch.tensor(SAT_STD).view(3, 1, 1)
+        img = (img - mean_t) / std_t
         # Resize to 512×512
         img = F.interpolate(img.unsqueeze(0), size=(self.img_size, self.img_size),
                             mode='bilinear', align_corners=False).squeeze(0)
@@ -81,11 +87,10 @@ print(f"  Train: {len(train_sub)}/{len(train_ds)} | Val: {len(val_ds)}")
 train_loader = DataLoader(train_sub, BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
 val_loader   = DataLoader(val_ds,   BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
 
-# ─── ASPP Decoder (for 32×32 feature map → 512×512 output) ──────────────
+# ─── ASPP Decoder ───────────────────────────────────────────────────────
 import timm
 
 class ASPPDecoder(nn.Module):
-    """Concat-fusion ASPP for 32×32 grid → 512 output."""
     def __init__(self, in_dim=1024, dec_dim=256, n_classes=N_CLASSES):
         super().__init__()
         self.laterals = nn.ModuleList([
@@ -128,7 +133,6 @@ class ASPPDecoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.3),
         )
-        # 2-stage upsampling: 32→128 (4×) → 128→512 (4×)
         self.refine = nn.Sequential(
             nn.Conv2d(dec_dim, dec_dim, 3, padding=1),
             nn.BatchNorm2d(dec_dim),
@@ -141,17 +145,14 @@ class ASPPDecoder(nn.Module):
 
     def forward(self, features):
         proj = [lat(f) for lat, f in zip(self.laterals, features)]
-        x = self.fusion(torch.cat(proj, dim=1))      # [B, 256, 32, 32]
-
+        x = self.fusion(torch.cat(proj, dim=1))
         b1 = self.aspp_b1(x); b2 = self.aspp_b2(x)
         b3 = self.aspp_b3(x); b4 = self.aspp_b4(x)
         bg = F.interpolate(self.aspp_global(x), size=b1.shape[-2:], mode='bilinear', align_corners=False)
-        x = self.fuse(torch.cat([b1, b2, b3, b4, bg], dim=1))  # [B, 256, 32, 32]
-
-        # 2-stage upsampling: 32→128 (4×) → refine → 128→512 (4×)
-        x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)  # →128
+        x = self.fuse(torch.cat([b1, b2, b3, b4, bg], dim=1))
+        x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)
         x = self.refine(x)
-        x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)  # →512
+        x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)
         return self.head(x)
 
 
@@ -176,6 +177,26 @@ class LoveDA512(nn.Module):
         return self.decoder(intermediates)
 
 
+# ─── Dice Loss ──────────────────────────────────────────────────────────
+class DiceLoss(nn.Module):
+    def __init__(self, smooth=1e-5):
+        super().__init__()
+        self.smooth = smooth
+    def forward(self, pred, target):
+        # Replace ignore_index before one_hot to prevent out-of-bounds
+        target_clean = target.clone()
+        target_clean[target == IGNORE_INDEX] = 0
+        pred_softmax = F.softmax(pred, dim=1)
+        target_onehot = F.one_hot(target_clean, num_classes=pred.shape[1]).permute(0, 3, 1, 2).float()
+        # Mask ignore_index
+        mask = (target != IGNORE_INDEX).unsqueeze(1).float()
+        pred_softmax = pred_softmax * mask
+        target_onehot = target_onehot * mask
+        intersection = (pred_softmax * target_onehot).sum(dim=(2, 3))
+        union = pred_softmax.sum(dim=(2, 3)) + target_onehot.sum(dim=(2, 3))
+        dice = (2 * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice.mean()
+
 # ─── Training ───────────────────────────────────────────────────────────
 device = 'cuda'
 print(f"\nDevice: {torch.cuda.get_device_name(0)}")
@@ -188,12 +209,13 @@ print(f"Params: {total:,} total, {trainable:,} trainable ({trainable/total*100:.
 opt = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
             lr=LR, weight_decay=WEIGHT_DECAY)
 sched = CosineAnnealingLR(opt, T_max=EPOCHS)
-crit = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+crit_ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+crit_dice = DiceLoss()
 
 best_miou = 0.0
 best_ep = 0
 
-print(f"=== Training {EPOCHS} epochs ({SUBSET*100:.0f}% data, 512×512 input) ===\n")
+print(f"=== Training {EPOCHS} epochs ({SUBSET*100:.0f}% data, 512×512, ASPP, SAT-493M norm + Dice) ===\n")
 
 for epoch in range(EPOCHS):
     t0 = time.time()
@@ -203,15 +225,18 @@ for epoch in range(EPOCHS):
     tr_intersect = np.zeros(N_CLASSES, dtype=np.float64)
     tr_union = np.zeros(N_CLASSES, dtype=np.float64)
 
-    for imgs, masks in train_loader:
+    for batch_idx, (imgs, masks) in enumerate(train_loader):
         imgs, masks = imgs.to(device), masks.to(device)
         preds = model(imgs)
-        loss = crit(preds, masks)
+        loss = crit_ce(preds, masks) + crit_dice(preds, masks)
         opt.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         opt.step()
         tr_loss += loss.item()
+
+        if batch_idx % 100 == 0:
+            print(f"  [{epoch+1}/{EPOCHS}] batch {batch_idx}/{len(train_loader)} loss={loss.item():.4f}")
 
         pred_labels = preds.argmax(dim=1)
         for c in range(N_CLASSES):
@@ -231,7 +256,7 @@ for epoch in range(EPOCHS):
         for imgs, masks in val_loader:
             imgs, masks = imgs.to(device), masks.to(device)
             preds = model(imgs)
-            vl_loss += crit(preds, masks).item()
+            vl_loss += (crit_ce(preds, masks) + crit_dice(preds, masks)).item()
             pred_labels = preds.argmax(dim=1)
             for c in range(N_CLASSES):
                 p = (pred_labels == c)
@@ -270,7 +295,8 @@ for epoch in range(EPOCHS):
 print(f"\nDone! Best: {best_miou:.4f}@ep{best_ep}")
 json.dump({
     'best_miou': best_miou, 'best_epoch': best_ep,
-    'arch': 'aspp-512',
+    'arch': 'aspp-512-dice',
+    'normalization': 'sat493m',
     'config': {
         'backbone': 'vit_large_patch16_dinov3.sat493m',
         'frozen': True,
