@@ -77,12 +77,6 @@ python -u train_kvasir.py --epochs 80 --batch-size 12 --img-size 392 --lr 1e-3
 python -u train_kvasir.py --finetune --grad-checkpoint --epochs 20 --batch-size 2 --lr 2e-5
 ```
 
-**关于速度**：GTX 1060 上编码器前向一张 392² 约 1~2 秒，880 张一轮要二十多分钟。
-所以冻结编码器时默认开启**特征缓存**：编码器只跑一遍把 1/14 特征存成 fp16 的 `.npy`
-（训练集约 5.7 GB），之后每轮只训解码器（几秒~几十秒）。
-`--no-cache-features` 可关掉（每轮重跑编码器）；`--finetune` 会自动关掉缓存。
-缓存写的是临时文件、全部写完才改名，中途 Ctrl+C 不会留下"半成品缓存"被误用。
-
 主要参数：
 
 | 参数 | 默认值 | 说明 |
