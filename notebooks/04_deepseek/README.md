@@ -1,6 +1,6 @@
 # DeepSeek-V4.1-Flash 纯视觉编码器 — Kvasir-SEG 息肉分割
 
-用 DeepSeek-V4.1-Flash 的**纯视觉编码器（ViT-412M）**当 backbone，在 Kvasir-SEG 上做息肉二分类分割。
+用 DeepSeek-V4.1-Flash 的纯视觉编码器（ViT-412M）当 backbone，在 Kvasir-SEG 上做息肉二分类分割。
 
 这个编码器是 timm 对 DeepSeek-V4.1-Flash 视觉塔的原生 remap：**不含语言模型权重、也没有训练好的分类头**，本身只做图像特征提取；本目录把它当分割 backbone 用（冻结编码器 + 轻量解码器）。
 
@@ -28,7 +28,7 @@
 conda create -n deepseek python=3.11 -y
 conda activate deepseek
 
-# torch（cu124；GTX 1060 是 sm_61，cu124 的轮子可用）
+# torch（cu124）
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
 # 注意：PyPI 上最新版 timm（1.0.29）里还没有这个模型，必须装 GitHub main
@@ -134,7 +134,7 @@ python visualize_results.py --n 6
 1. **没有尺度金字塔**：所有 block 的特征都是 1/14 分辨率（`reduction` 恒为 patch_size），所以本脚本用「多深度融合 + ASPP + 逐级上采样」代替常见的 FPN 金字塔。
 2. **RoPE 位置编码**（无绝对位置嵌入）：换输入尺寸不退化，只要边长能被 14 整除；`dynamic_img_pad=True` 可放宽这个限制。
 3. **显存**：默认 546×546 时激活约 1.76G；本脚本用 392×392 且默认冻结编码器，6GB 显存可跑。
-4. **timm 版本坑**：`deepseek_vit_412m*` 只在 GitHub main 分支注册，PyPI 的 timm 1.0.29 里没有（会报 unknown model）。
+4. **timm 版本坑**：`deepseek_vit_412m只在 GitHub main 分支注册，PyPI 的 timm 1.0.29 里没有（会报 unknown model）。
 5. 同一系列还有 `..._enc`（原生编码器，带投影到 LLM 的 aligner）和 `..._align` 两个变体；分割用本目录这个纯编码器 + 自己的解码器最直接。
 
 ## 参考
