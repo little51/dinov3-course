@@ -1,0 +1,6 @@
+# 大文件不入库（权重 1.6GB / 数据 / 训练输出）
+model/
+data/
+outputs/
+__pycache__/
+*.pyc
