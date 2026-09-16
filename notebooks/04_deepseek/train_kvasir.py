@@ -91,10 +91,12 @@ class FeatureCache:
         n = len(pairs)
         levels = len(backbone.out_indices)
         ch = backbone.num_features
-        s = img_size // 14
+        _h, _w = _hw(img_size)
+        _p = getattr(backbone, "patch_size", 14)
+        s = (_h // _p, _w // _p)
         if self.path.exists():
             mm = np.load(self.path, mmap_mode="r")
-            if mm.shape == (n, levels, ch, s, s):
+            if mm.shape == (n, levels, ch, *s):
                 print(f"[cache] 复用 {self.path.name}  {mm.shape}  {self.path.stat().st_size/2**30:.2f} GB")
                 return
             print(f"[cache] {self.path.name} 形状不匹配，重建")
@@ -103,7 +105,7 @@ class FeatureCache:
         ds = KvasirSegDataset(pairs, img_size, train=False)
         loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
         # 先写临时文件，全部写完再改名 → 中途被打断不会留下"看起来完整"的缓存
-        mm = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float16, shape=(n, levels, ch, s, s))
+        mm = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float16, shape=(n, levels, ch, *s))
         t0, done = time.time(), 0
         backbone.eval()
         for i, (img, _) in enumerate(loader):
@@ -141,7 +143,8 @@ class FeatDataset(Dataset):
 
     def __getitem__(self, i):
         f = np.asarray(self._mmap()[i], dtype=np.float32)          # (L,C,S,S)
-        mask = Image.open(self.pairs[i][1]).convert("L").resize((self.img_size, self.img_size), Image.NEAREST)
+        _h, _w = _hw(self.img_size)
+        mask = Image.open(self.pairs[i][1]).convert("L").resize((_w, _h), Image.NEAREST)
         mask = (np.asarray(mask, dtype=np.float32) > 127).astype(np.float32)[None]   # (1,H,W)
         if self.train:
             if random.random() < 0.5:
@@ -172,8 +175,9 @@ class KvasirSegDataset(Dataset):
 
     def __getitem__(self, i):
         img, mask = self._load(i)
-        img = img.resize((self.img_size, self.img_size), Image.BICUBIC)
-        mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
+        h, w = _hw(self.img_size)
+        img = img.resize((w, h), Image.BICUBIC)
+        mask = mask.resize((w, h), Image.NEAREST)
         img = np.asarray(img, dtype=np.float32) / 255.0
         mask = (np.asarray(mask, dtype=np.float32) > 127).astype(np.float32)
 
@@ -182,7 +186,7 @@ class KvasirSegDataset(Dataset):
                 img, mask = img[:, ::-1], mask[:, ::-1]
             if random.random() < 0.5:                       # 垂直翻转
                 img, mask = img[::-1], mask[::-1]
-            k = random.randint(0, 3)                        # 90° 旋转
+            k = random.randint(0, 3) if h == w else random.choice([0, 2])   # 非正方形：避免 90° 旋转交换 H/W
             if k:
                 img, mask = np.rot90(img, k), np.rot90(mask, k)
             if random.random() < 0.3:                       # 亮度/对比度抖动
@@ -217,6 +221,49 @@ def build_splits(root: Path, val_ratio=0.12, seed=42, split_json=None):
 
 
 # ----------------------------------------------------------------------------- 模型
+def _hw(sz):
+    """统一尺寸成 (h, w)：接受 int / (h,w) / 'HxW' / 'S'。"""
+    if isinstance(sz, str):
+        parts = sz.lower().replace(" ", "").split("x")
+        if len(parts) == 2:
+            return int(parts[0]), int(parts[1])
+        return int(parts[0]), int(parts[0])
+    if isinstance(sz, (tuple, list)):
+        return int(sz[0]), int(sz[1])
+    return int(sz), int(sz)
+
+
+def _get_patch_size(arch, default=14):
+    """从 timm 模型定义里读 patch size（DeepSeek=14 / DINOv3=16 ...）。"""
+    try:
+        m = timm.create_model(arch, pretrained=False, num_classes=0, global_pool="")
+        for path in ("patch_embed.patch_size", "encoder.patch_embed.patch_size",
+                     "encoder.encoder.patch_embed.patch_size"):
+            obj = m
+            for part in path.split("."):
+                obj = getattr(obj, part, None)
+                if obj is None:
+                    break
+            if obj is not None:
+                return int(obj[0] if isinstance(obj, (tuple, list)) else obj)
+    except Exception:
+        pass
+    return default
+
+
+def _find_blocks(model):
+    """兼容不同 backbone 的层列表位置：DeepSeek 藏在 encoder 内，标准 ViT 在顶层。"""
+    for path in ("blocks", "encoder.blocks", "encoder.encoder.blocks"):
+        obj = model
+        for part in path.split("."):
+            obj = getattr(obj, part, None)
+            if obj is None:
+                break
+        if obj is not None:
+            return list(obj)
+    raise AttributeError(f"找不到 transformer blocks: {type(model).__name__}")
+
+
 class DeepSeekViTBackbone(nn.Module):
     """timm 的 DeepSeek ViT 编码器：加载本地 safetensors，取多个中间层 (都是 1/14 分辨率)。"""
 
@@ -254,13 +301,18 @@ class DeepSeekViTBackbone(nn.Module):
         else:
             self.ckpt_report = None
 
+        try:
+            _ps = self.enc.patch_embed.patch_size
+            self.patch_size = int(_ps[0] if isinstance(_ps, (tuple, list)) else _ps)
+        except Exception:
+            self.patch_size = 14
         self.freeze = freeze
         self._apply_freeze()
         if self.unfreeze_last > 0:                 # ★解冻编码器最后 N 个 block + 尾部两个 norm
             self._unfreeze_tail(self.unfreeze_last)
 
     def _unfreeze_tail(self, n):
-        blks = list(self.enc.encoder.blocks)
+        blks = _find_blocks(self.enc)
         for blk in blks[-n:]:
             for p_ in blk.parameters():
                 p_.requires_grad_(True)
@@ -298,12 +350,12 @@ class DeepSeekViTBackbone(nn.Module):
             with torch.no_grad():
                 feats = self.enc.forward_intermediates(
                     x, indices=list(self.out_indices), norm=True,
-                    output_fmt="NCHW", intermediates_only=True, output_dict=False,
+                    output_fmt="NCHW", intermediates_only=True,
                 )
             return [f.detach() for f in feats]
         return self.enc.forward_intermediates(
             x, indices=list(self.out_indices), norm=True,
-            output_fmt="NCHW", intermediates_only=True, output_dict=False,
+            output_fmt="NCHW", intermediates_only=True,
         )
 
 
@@ -366,7 +418,7 @@ class SegDecoder(nn.Module):
 
     def forward(self, feats, out_size=None, x_img=None):
         if out_size is None:
-            out_size = (self.img_size, self.img_size)
+            out_size = _hw(self.img_size)
         x = torch.cat([p(f) for p, f in zip(self.proj, feats)], dim=1)      # 1/14
         x = self.fuse(x)
         x = self.aspp(x)
@@ -435,7 +487,7 @@ def forward_logits(model, x, mode, x_img=None):
     """返回 (logits, mid_logits)。mode='feat' 时 x 是缓存特征、无原图，细节分支自动跳过。"""
     if mode == "feat":
         return model.decoder(list(x.unbind(1)), x_img=x_img,
-                             out_size=(model.decoder.img_size, model.decoder.img_size))
+                             out_size=_hw(model.decoder.img_size))
     return model(x)
 
 
@@ -490,7 +542,7 @@ def main():
     ap.add_argument("--weights", default="model/model.safetensors")
     ap.add_argument("--arch", default=DEFAULT_ARCH)
     ap.add_argument("--out-dir", default="outputs")
-    ap.add_argument("--img-size", type=int, default=392, help="必须能被 14 整除")
+    ap.add_argument("--img-size", default="392", help="必须能被 14 整除")
     ap.add_argument("--out-indices", default="7,15,23,31", help="取哪些 block 的中间特征")
     ap.add_argument("--prune-to", type=int, default=None, help="只用前 N 个 block（省算力）")
     ap.add_argument("--epochs", type=int, default=40)
@@ -521,7 +573,10 @@ def main():
     ap.add_argument("--cache-dir", default=None, help="特征缓存目录，默认 outputs/cache")
     args = ap.parse_args()
 
-    assert args.img_size % 14 == 0, "--img-size 必须能被 14 整除（patch=14）"
+    _patch = _get_patch_size(args.arch)
+    _h, _w = _hw(args.img_size)
+    assert _h % _patch == 0 and _w % _patch == 0, (
+        f"--img-size 的高({_h})和宽({_w})都必须能被 {_patch} 整除（{args.arch} 的 patch={_patch}）")
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -571,7 +626,7 @@ def main():
     if use_cache:
         cache_dir = Path(args.cache_dir) if args.cache_dir else (out_dir / "cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
-        tag = f"sz{args.img_size}_idx{'-'.join(map(str, out_indices))}_b{len(model.backbone.enc.encoder.blocks)}"
+        tag = f"sz{args.img_size}_idx{'-'.join(map(str, out_indices))}_b{len(_find_blocks(model.backbone.enc))}"
         print("[cache] 特征缓存模式：编码器只跑一遍，之后只训解码器")
         FeatureCache(model.backbone, tr_pairs, args.img_size, cache_dir / f"train_{tag}.npy",
                      max(1, args.batch_size), device)
