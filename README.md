@@ -4,7 +4,7 @@
 
 - ### 本书完整源码、数据和配套资源请见本书前言中的二维码资源包
 
-![图书](https://5starsoft.com.cn/dinov3.jpg)
+![图书](https://gitclone.com/download1/aliendao/dinov3.png)
 
 ### 本书由清华大学出版社出版     [图书出版社链接](https://www.tup.tsinghua.edu.cn/booksCenter/book_11572701.html)
 
