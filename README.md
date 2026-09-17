@@ -59,6 +59,7 @@
 | [01_pastis](./notebooks/01_pastis/README.md) | PASTIS 时序语义分割 — 多时相遥感像素级分类 | DINOv3 ViT-L + MultiScaleFPN + RegLTAE |
 | [02_loveda](./notebooks/02_loveda/README.md) | LoveDA 地物分割 — DINOv3 不 resize，1024×1024 原图输入+ASPP | DINOv3 ViT-L + ASPP / Sum-Fusion |
 | [03_sam3_tree](./notebooks/03_sam3_tree/README.md) | SAM3 树计数 — 文本提示驱动遥感树冠检测 | SAM3 + CLIP（Windows 兼容） |
+| [04_deepseek](./notebooks/04_deepseek/README.md) | DeepSeek-ViT 在 Kvasir-SEG 数据集上的分割 | DINOv3 VS DeepSeek-ViT |
 
 > 这些 notebooks 放在 `notebooks/` 目录下，每个独立成目录，含 README 和使用说明。
 
