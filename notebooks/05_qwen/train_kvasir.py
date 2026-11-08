@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Kvasir-SEG 息肉分割 —— 用 DeepSeek-V4.1-Flash 的纯视觉编码器（ViT-412M）当 backbone。
+Kvasir-SEG 息肉分割 —— 通用视觉编码器骨干训练脚本。
 
-编码器来自 timm 对 DeepSeek-V4.1-Flash 视觉塔的 remap（无语言模型权重、无预训练分类头），
-本脚本冻结/微调该编码器，接一个轻量分割解码器，在 Kvasir-SEG 上做二分类（息肉/背景）分割。
+支持任意 timm 视觉编码器当 backbone（DINOv3 / Qwen3-ViT / EUPE / RADIO / DeepSeek-ViT 等），
+只换 --arch 和 --weights 即可。脚本冻结或微调该编码器，接一个轻量分割解码器，
+在 Kvasir-SEG 上做二分类（息肉/背景）分割。
 
-要点（针对这个编码器的特性）：
-  * patch=14，所有 block 的特征都是 1/14 分辨率 → 没有尺度金字塔，所以多取几个中间层做"深度融合"
-  * 位置编码是 RoPE（无绝对位置嵌入）→ 输入尺寸只要能被 14 整除即可，本脚本默认 392 (=14×28)
-  * 6GB 显存下默认冻结编码器只训解码器；--finetune 打开全量微调（配 --grad-checkpoint 省显存）
+要点（针对这类纯 ViT 编码器的共性）：
+  * 单尺度特征：所有 block 输出同一分辨率（1/patch），没有 CNN 那种尺度金字塔
+    → 所以取多个中间层做融合，out-indices 按网络深度等距取四点
+  * 位置编码可能是 RoPE（无绝对位置嵌入）也可能可学习 → 输入尺寸取 patch 的整数倍即可
+  * 显存紧张时默认冻结编码器只训解码器；--unfreeze-last N 解冻最后 N 层做渐进式微调
+  * 不同编码器的特征维度不同（768 / 1024 ...），num_features 会自动探测
 
 用法示例：
   # 冒烟测试（16 张训练图，1 个 epoch）
@@ -41,7 +44,7 @@ from safetensors.torch import load_file as load_safetensors
 
 IMAGENET_MEAN = (0.5, 0.5, 0.5)  # 与该编码器原始预处理一致
 IMAGENET_STD = (0.5, 0.5, 0.5)
-DEFAULT_ARCH = "deepseek_vit_412m.deepseek_v4_1_flash"
+DEFAULT_ARCH = "deepseek_vit_412m.deepseek_v4_1_flash"   # 仅为默认值，实际用 --arch 覆盖
 
 
 # ----------------------------------------------------------------------------- 数据
@@ -234,7 +237,7 @@ def _hw(sz):
 
 
 def _get_patch_size(arch, default=14):
-    """从 timm 模型定义里读 patch size（DeepSeek=14 / DINOv3=16 ...）。"""
+    """从 timm 模型定义里读 patch size（常见 14 或 16，各骨干不同）。"""
     try:
         m = timm.create_model(arch, pretrained=False, num_classes=0, global_pool="")
         for path in ("patch_embed.patch_size", "encoder.patch_embed.patch_size",
@@ -252,7 +255,7 @@ def _get_patch_size(arch, default=14):
 
 
 def _find_blocks(model):
-    """兼容不同 backbone 的层列表位置：DeepSeek 藏在 encoder 内，标准 ViT 在顶层。"""
+    """兼容不同 backbone 的层列表位置：有的放在 encoder 子模块内，标准 ViT 在顶层。"""
     for path in ("blocks", "encoder.blocks", "encoder.encoder.blocks"):
         obj = model
         for part in path.split("."):
@@ -264,8 +267,8 @@ def _find_blocks(model):
     raise AttributeError(f"找不到 transformer blocks: {type(model).__name__}")
 
 
-class DeepSeekViTBackbone(nn.Module):
-    """timm 的 DeepSeek ViT 编码器：加载本地 safetensors，取多个中间层 (都是 1/14 分辨率)。"""
+class VisionBackbone(nn.Module):
+    """通用 timm ViT 编码器：加载本地 safetensors，取多个中间层（同一分辨率）。"""
 
     def __init__(self, arch=DEFAULT_ARCH, ckpt=None, out_indices=(7, 15, 23, 31),
                  img_size=392, freeze=True, unfreeze_last=0, grad_checkpoint=False,
@@ -445,7 +448,7 @@ class SegModel(nn.Module):
     def __init__(self, arch, ckpt, out_indices, img_size, freeze=True, unfreeze_last=0,
                  grad_checkpoint=False, mid=256, prune_to=None, progressive=False):
         super().__init__()
-        self.backbone = DeepSeekViTBackbone(arch, ckpt, out_indices, img_size,
+        self.backbone = VisionBackbone(arch, ckpt, out_indices, img_size,
                                             freeze=freeze, unfreeze_last=unfreeze_last,
                                             grad_checkpoint=grad_checkpoint, prune_to=prune_to)
         self.decoder = SegDecoder([self.backbone.num_features] * len(self.backbone.out_indices),
