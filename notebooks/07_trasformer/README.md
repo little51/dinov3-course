@@ -81,3 +81,37 @@ EPOCHS = 5       # 想训练更久可改为10
 - 显存不足：减小`BATCH_SIZE`。
 - GPU没启用：运行`python -c "import torch; print(torch.cuda.is_available())"`，应输出`True`。
 - CIFAR-10原图很小，Resize到224×224不会产生新细节，因此结果不是DINOv3在高分辨率自然图像上的真实上限。
+
+## Kvasir-SEG医学分割
+
+`train_dinov3_kvasir.py`使用Transformers加载DINOv3 ViT-L/16，在Kvasir-SEG上训练息肉分割模型。
+
+数据目录应为：
+
+```text
+data/Kvasir-SEG/
+├── images/  # 内镜图像
+└── masks/   # 与图像同名的二值掩码
+```
+
+运行：
+
+```bash
+conda activate dinov3
+cd ~/dinov3-course/notebooks/07_trasformer
+python train_dinov3_kvasir.py --data data/Kvasir-SEG
+```
+
+默认配置：输入448×448、batch size为12、最多200轮、验证Dice连续10轮不提高则早停。程序自动从hf-mirror下载`kryveil/dinov3-vitl16-pretrain-lvd1689m`权重。
+
+模型会同时读取ViT-L的第6、12、18、24层特征，经过投影、融合、ASPP和原图细节分支后输出448×448掩码。骨干前20层冻结，仅解冻最后4层；编码器学习率为2e-5，分割解码器学习率为1e-3。
+
+每轮输出训练损失与验证Dice：
+
+```text
+epoch 1: loss = x.xxxx, val dice = x.xxxx
+```
+
+Kvasir-SEG共1000张图，脚本按固定种子划分800张训练、200张验证。实测最佳验证Dice为0.9105，第9轮达到；第19轮因连续10轮未提升而早停。
+
+若显存不足，可先将`--batch-size 12`改成`--batch-size 6`。
